@@ -87,13 +87,44 @@ class NetworkSimulator:
                             break
                     except ValueError:
                         print("Please enter a valid number.")
-                
                 # Create switches
                 switches = []
                 for s in range(num_switches):
                     switch = Switch(s)
                     switches.append(switch)
                     self.switches.append(switch)
+                    
+                    # Ask if user wants to connect devices directly to switch
+                    direct_devices = []
+                    direct_connect = input(f"Do you want to connect devices directly to SWITCH {s}? (y/n): ").lower() == 'y'
+                    
+                    if direct_connect:
+                        # Create end devices connected directly to this switch
+                        while True:
+                            try:
+                                num_direct_devices = int(input(f"Enter number of devices to connect directly to SWITCH {s}: "))
+                                if num_direct_devices < 0:
+                                    print("Please enter a non-negative number.")
+                                else:
+                                    break
+                            except ValueError:
+                                print("Please enter a valid number.")
+                        
+                        for d in range(num_direct_devices):
+                            device_name = chr(65 + len(self.devices))  # Generate name as letter (A, B, C...)
+                            mac_address = len(self.devices) + 1
+                            ip_address = f"192.168.{s+1}.{100+d}"  # Use 100+ subnet for direct connections
+                            
+                            device = EndDevices(mac_address, device_name, ip_address)
+                            direct_devices.append(device)
+                            self.devices.append(device)
+                            print(f"Created device {device_name} with IP {ip_address} and MAC {mac_address}")
+                            
+                            # Add this device to the switch's direct connections
+                            switch.add_to_direct_connection_table(device)
+                        
+                        # Store direct connections in the switch
+                        switch.store_directly_connected_devices(direct_devices)
                     
                     # Create hubs for each switch
                     while True:
@@ -129,7 +160,7 @@ class NetworkSimulator:
                         for d in range(num_devices):
                             device_name = chr(65 + len(self.devices))  # Generate name as letter (A, B, C...)
                             mac_address = len(self.devices) + 1
-                            ip_address = f"192.168.{s+1}.{d+1}"
+                            ip_address = f"192.168.{s+1}.{h+1}.{d+1}"
                             
                             device = EndDevices(mac_address, device_name, ip_address)
                             hub_devices.append(device)
@@ -274,6 +305,30 @@ class NetworkSimulator:
                 devices = conn.get_connected_devices()
                 print(f"Connection {i+1}: {devices[0].get_device_name()} <--> {devices[1].get_device_name()}")
         
+        print("\nSwitches and Directly Connected Devices:")
+        for switch in self.switches:
+            print(f"Switch {switch.switch_number}:")
+            
+            # Show directly connected devices
+            if switch.connected_direct:
+                print(f"  Directly connected devices: {len(switch.connected_direct)}")
+                for i, device in enumerate(switch.connected_direct):
+                    port_num = i + 1
+                    print(f"  - Device {device.get_device_name()} on PORT {port_num}: MAC={device.get_mac()}, IP={device.IP}")
+            else:
+                print(f"  No directly connected devices")
+            
+            # Show connected hubs
+            if switch.hubs:
+                print(f"  Connected hubs: {len(switch.hubs)}")
+                for i, hub in enumerate(switch.hubs):
+                    port_num = len(switch.connected_direct) + i + 1
+                    hub_devices = hub.get_connected_devices() if hub.get_connected_devices() else []
+                    print(f"  - Hub {hub.get_hub_number()} on PORT {port_num}: {len(hub_devices)} connected devices")
+            
+            # Display the MAC address table
+            switch.display_mac_table()
+        
         print("\nHubs and Connected Devices:")
         for hub in self.hubs:
             if hub.hub_number == -1:
@@ -322,6 +377,12 @@ class NetworkSimulator:
         print(f"Selected sender: Device {self.sender_device.get_device_name()} (IP: {self.sender_IP})")
         print(f"Selected receiver: Device {self.receiver_device.get_device_name()} (IP: {self.receiver_IP})")
         
+        # Reset previous connections
+        self.sender_hub = None
+        self.receiver_hub = None
+        sender_switch = None
+        receiver_switch = None
+        
         # Find the hubs for these devices
         for hub in self.hubs:
             devices = hub.get_connected_devices()
@@ -330,10 +391,38 @@ class NetworkSimulator:
             if devices and self.receiver_device in devices:
                 self.receiver_hub = hub
         
+        # Find if devices are connected directly to switches
+        for switch in self.switches:
+            if self.sender_device in switch.connected_direct:
+                sender_switch = switch
+                print(f"Sender is connected directly to Switch {switch.switch_number}")
+            if self.receiver_device in switch.connected_direct:
+                receiver_switch = switch
+                print(f"Receiver is connected directly to Switch {switch.switch_number}")
+        
         if self.sender_hub:
             print(f"Sender is connected to Hub {self.sender_hub.get_hub_number()}")
         if self.receiver_hub:
             print(f"Receiver is connected to Hub {self.receiver_hub.get_hub_number()}")
+            
+        # Set switches if they are known through hubs
+        if self.sender_hub and not sender_switch:
+            for switch in self.switches:
+                if self.sender_hub in switch.hubs:
+                    self.sender_switch = switch
+                    print(f"Sender's Hub {self.sender_hub.get_hub_number()} is connected to Switch {switch.switch_number}")
+                    break
+        else:
+            self.sender_switch = sender_switch
+            
+        if self.receiver_hub and not receiver_switch:
+            for switch in self.switches:
+                if self.receiver_hub in switch.hubs:
+                    self.receiver_switch = switch
+                    print(f"Receiver's Hub {self.receiver_hub.get_hub_number()} is connected to Switch {switch.switch_number}")
+                    break
+        else:
+            self.receiver_switch = receiver_switch
         
         return True
     
@@ -367,6 +456,42 @@ class NetworkSimulator:
         # Set up our checksum handler
         checksum_handler = ChecksumForDataLink()
         
+        # Determine connection type
+        sender_connected_to_switch = False
+        receiver_connected_to_switch = False
+        sender_connected_switch = None
+        receiver_connected_switch = None
+        
+        # Check if devices are directly connected to switches
+        for switch in self.switches:
+            if self.sender_device in switch.connected_direct:
+                sender_connected_to_switch = True
+                sender_connected_switch = switch
+            if self.receiver_device in switch.connected_direct:
+                receiver_connected_to_switch = True
+                receiver_connected_switch = switch
+                
+        connection_type = "Unknown"
+        if self.sender_hub and self.receiver_hub:
+            if self.sender_hub == self.receiver_hub:
+                connection_type = "Same Hub"
+            else:
+                connection_type = "Different Hubs"
+        elif sender_connected_to_switch and receiver_connected_to_switch:
+            if sender_connected_switch == receiver_connected_switch:
+                connection_type = "Same Switch"
+            else:
+                connection_type = "Different Switches"
+        elif self.sender_hub and receiver_connected_to_switch:
+            connection_type = "Hub to Switch"
+        elif sender_connected_to_switch and self.receiver_hub:
+            connection_type = "Switch to Hub"
+        else:
+            # Direct connection or unrecognized topology
+            connection_type = "Direct"
+            
+        print(f"\n[NETWORK] ▶ Connection type: {connection_type}")
+        
         # Simulate sending frames with Go-Back-N
         current_seq = 0
         frames_sent = 0
@@ -386,32 +511,45 @@ class NetworkSimulator:
                 print(f"\n[SENDER] ▶ Sending frame {current_seq}: {frame_data}")
                 self.sender_device.data = frame
                 
-                # Special case: if the hub is a virtual hub (direct connection to router)
-                if self.sender_hub.hub_number == -1 or self.receiver_hub.hub_number == -1:
-                    print("Direct connection devices (no switch involved)")
+                # Handle different connection types
+                if connection_type == "Direct" or (self.sender_hub and (self.sender_hub.hub_number == -1 or self.receiver_hub.hub_number == -1)):
+                    print("[NETWORK] ▶ Direct connection path")
                     self.sender_device.send_data_to_receiver(self.receiver_device)
-                # Check if sender and receiver are in the same hub
-                elif self.sender_hub == self.receiver_hub:
-                    print("Sender and receiver are in the same hub")
+                elif connection_type == "Same Hub":
+                    print("[NETWORK] ▶ Same hub path")
                     self.sender_device.send_data_and_address_to_hub(self.sender_hub)
                     self.sender_hub.send_data_to_receiver(self.receiver_device)
-                else:
-                    print("Sender and receiver are in different hubs")
+                elif connection_type == "Same Switch":
+                    print("[NETWORK] ▶ Same switch path")
+                    sender_connected_switch.send_direct_data(self.sender_device, self.receiver_device)
+                elif connection_type == "Different Hubs":
+                    print("[NETWORK] ▶ Different hubs path")
                     # Find a switch connecting both hubs
-                    self.sender_switch = None
+                    connecting_switch = None
                     for s in self.switches:
                         if self.sender_hub in s.hubs and self.receiver_hub in s.hubs:
-                            self.sender_switch = self.receiver_switch = s
+                            connecting_switch = s
                             break
                     
-                    if self.sender_switch is not None:
+                    if connecting_switch:
                         self.sender_device.send_data_and_address_to_hub(self.sender_hub)
-                        self.sender_hub.send_data_to_switch(self.sender_switch, self.sender_hub, self.receiver_hub, 
+                        self.sender_hub.send_data_to_switch(connecting_switch, self.sender_hub, self.receiver_hub, 
                                                           self.sender_device, self.receiver_device)
                     else:
-                        print("ERROR: Could not find a path between sender and receiver")
-                        print("Direct connection will be used instead")
+                        print("[NETWORK] ⚠ Could not find a path between hubs, using direct connection")
                         self.sender_device.send_data_to_receiver(self.receiver_device)
+                elif connection_type == "Different Switches":
+                    print("[NETWORK] ⚠ Different switches path - not implemented yet, using direct connection")
+                    self.sender_device.send_data_to_receiver(self.receiver_device)
+                elif connection_type == "Hub to Switch":
+                    print("[NETWORK] ⚠ Hub to switch path - not implemented yet, using direct connection")
+                    self.sender_device.send_data_to_receiver(self.receiver_device)
+                elif connection_type == "Switch to Hub":
+                    print("[NETWORK] ⚠ Switch to hub path - not implemented yet, using direct connection")
+                    self.sender_device.send_data_to_receiver(self.receiver_device)
+                else:
+                    print("[NETWORK] ⚠ Unknown path, using direct connection")
+                    self.sender_device.send_data_to_receiver(self.receiver_device)
                 
                 # Move to next sequence number
                 current_seq = (current_seq + 1) % 10
@@ -938,6 +1076,81 @@ class NetworkSimulator:
         else:
             print("Error in data transfer, retransmission needed")
     
+    def test_switch_operation(self):
+        """Test switch operation and MAC address learning"""
+        print("\n--- SWITCH OPERATION TEST ---")
+        
+        # Check if we have any switches with directly connected devices
+        switches_with_devices = []
+        for switch in self.switches:
+            if len(switch.connected_direct) >= 2:
+                switches_with_devices.append(switch)
+        
+        if not switches_with_devices:
+            print("No switches with at least two directly connected devices available.")
+            
+            # Ask if user wants to create a switch with directly connected devices
+            create_new = input("Do you want to create a switch with devices for testing? (y/n): ").lower() == 'y'
+            if create_new:
+                # Create a switch
+                switch = Switch(len(self.switches))
+                self.switches.append(switch)
+                print(f"Created Switch {switch.switch_number}")
+                
+                # Create devices
+                devices = []
+                for i in range(2):  # Create at least 2 devices
+                    device_name = chr(65 + len(self.devices))
+                    mac_address = len(self.devices) + 1
+                    ip_address = f"192.168.{switch.switch_number+1}.{i+1}"
+                    
+                    device = EndDevices(mac_address, device_name, ip_address)
+                    devices.append(device)
+                    self.devices.append(device)
+                    print(f"Created device {device_name} with IP {ip_address} and MAC {mac_address}")
+                    
+                    # Connect device to switch
+                    switch.add_to_direct_connection_table(device)
+                
+                # Store direct connections in the switch
+                switch.store_directly_connected_devices(devices)
+                
+                # Use this switch for testing
+                switches_with_devices = [switch]
+            else:
+                print("Returning to main menu.")
+                return
+        
+        # Let user select a switch
+        if len(switches_with_devices) > 1:
+            print("Available switches with directly connected devices:")
+            for i, switch in enumerate(switches_with_devices):
+                print(f"{i+1}. Switch {switch.switch_number} with {len(switch.connected_direct)} connected devices")
+            
+            selection = int(input("Select a switch for testing (number): ")) - 1
+            switch = switches_with_devices[selection]
+        else:
+            switch = switches_with_devices[0]
+            print(f"Using Switch {switch.switch_number} for testing.")
+        
+        # Show devices connected to this switch
+        print(f"\nDevices connected to Switch {switch.switch_number}:")
+        for i, device in enumerate(switch.connected_direct):
+            print(f"{i+1}. Device {device.get_device_name()}: MAC={device.get_mac()}, IP={device.IP}")
+        
+        # Let user select sender and receiver
+        sender_index = int(input("Select sender device (number): ")) - 1
+        sender_device = switch.connected_direct[sender_index]
+        
+        receiver_index = int(input("Select receiver device (number): ")) - 1
+        receiver_device = switch.connected_direct[receiver_index]
+        
+        # Import and use the test_switch_operation module
+        from test_switch_operation import test_switch_mac_learning
+        
+        # Run the test
+        test_switch_mac_learning(sender_device, receiver_device, switch)
+
     def run_simulator(self):
         """Run the network simulator with a menu"""
         print("\n===== NETWORK SIMULATOR =====")
@@ -960,13 +1173,14 @@ class NetworkSimulator:
             print("2. Create Star Topology With Hub")
             print("3. Test Direct Connection")
             print("4. Test Star Topology (Hub Broadcasting)")
+            print("5. Test Switch Operation (MAC Learning)")
             print("\nOTHER OPTIONS:")
-            print("5. Test Data Transfer (via existing topology)")
-            print("6. Test Email Service (Application Layer)")
-            print("7. Test Search Engine (Application Layer)")
-            print("8. Show Network Topology")
-            print("9. Select Sender and Receiver")
-            print("10. Create Complex Network Topology")  
+            print("6. Test Data Transfer (via existing topology)")
+            print("7. Test Email Service (Application Layer)")
+            print("8. Test Search Engine (Application Layer)")
+            print("9. Show Network Topology")
+            print("10. Select Sender and Receiver")
+            print("11. Create Complex Network Topology")  
             print("0. Exit")
             
             choice = input("Enter your choice: ")
@@ -980,16 +1194,18 @@ class NetworkSimulator:
             elif choice == '4':
                 self.test_star_topology()
             elif choice == '5':
-                self.data_transfer_test()
+                self.test_switch_operation()
             elif choice == '6':
-                self.email_service_test()
+                self.data_transfer_test()
             elif choice == '7':
-                self.search_service_test()
+                self.email_service_test()
             elif choice == '8':
-                self.print_network_topology()
+                self.search_service_test()
             elif choice == '9':
-                self.select_sender_and_receiver()
+                self.print_network_topology()
             elif choice == '10':
+                self.select_sender_and_receiver()
+            elif choice == '11':
                 self.create_network_topology()
             elif choice == '0':
                 print("\nExiting Network Simulator. Goodbye!")
