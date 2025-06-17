@@ -126,48 +126,101 @@ class Switch:
     
     def send_direct_data(self, sender_device, receiver_device):
         """
-        Send data directly between devices
+        Send data directly between devices with CSMA/CD protocol
         
         Args:
             sender_device (EndDevices): Sender device
             receiver_device (EndDevices): Receiver device
         """
+        import random
+        import time
+        
         data = sender_device.get_data()
         print(f"\n[SWITCH {self.switch_number}] === DIRECT SWITCHING ===")
         print(f"[SWITCH {self.switch_number}] ▶ Source: {sender_device.get_device_name()} (MAC: {sender_device.get_mac()})")
         print(f"[SWITCH {self.switch_number}] ▶ Destination: {receiver_device.get_device_name()} (MAC: {receiver_device.get_mac()})")
         
-        # Check if we know this MAC address yet
-        known_receiver = False
-        if hasattr(self, 'mac_table') and receiver_device.get_mac() in self.mac_table:
-            known_receiver = True
-            print(f"[SWITCH {self.switch_number}] ✓ MAC address found in table: {receiver_device.get_mac()} → {self.mac_table[receiver_device.get_mac()]}")
-        elif receiver_device in self.connected_direct:
-            known_receiver = True
-            port_num = self.connected_direct.index(receiver_device) + 1
-            print(f"[SWITCH {self.switch_number}] ✓ Device connected directly: {receiver_device.get_device_name()} on Port {port_num}")
-            
-            # Add to MAC table for future reference
-            if hasattr(self, 'mac_table'):
-                self.mac_table[receiver_device.get_mac()] = f"PORT {port_num}"
-                print(f"[SWITCH {self.switch_number}] ⓘ MAC Table Updated: {receiver_device.get_mac()} → PORT {port_num}")
-                
-        # Learn the sender's MAC if needed
-        if hasattr(self, 'mac_table') and sender_device.get_mac() not in self.mac_table:
-            if sender_device in self.connected_direct:
-                port_num = self.connected_direct.index(sender_device) + 1
-                self.mac_table[sender_device.get_mac()] = f"PORT {port_num}"
-                print(f"[SWITCH {self.switch_number}] ⓘ MAC Table Updated: {sender_device.get_mac()} → PORT {port_num}")
+        # Initialize CSMA/CD variables
+        channel_busy = False
+        max_attempts = 5
+        attempt = 0
         
-        # Unlike a hub, a switch only forwards to the specific destination
-        if known_receiver:
-            print(f"[SWITCH {self.switch_number}] ▶ Forwarding frame directly to destination")
-        else:
-            print(f"[SWITCH {self.switch_number}] ⚠ Unknown destination MAC, flooding frame to all ports")
+        # Check if switch ports are busy (randomly)
+        # This simulates CSMA/CD medium sensing
+        print(f"[SWITCH {self.switch_number}] === PHYSICAL LAYER: CSMA/CD PROTOCOL ===")
+        
+        # Randomly determine if channel is busy (30% chance)
+        channel_busy = random.random() < 0.3
+        
+        while attempt < max_attempts:
+            print(f"[SWITCH {self.switch_number}] ▶ [CSMA/CD] Attempt {attempt+1}: Checking if channel is busy...")
             
-        # Send the data to the receiver
-        receiver_device.set_receiver_data(data)
-        print(f"[SWITCH {self.switch_number}] ✓ Frame forwarded to destination")
+            if channel_busy:
+                print(f"[SWITCH {self.switch_number}] ▶ [CSMA/CD] Channel busy. Waiting...")
+                time.sleep(0.5)  # Wait before retrying
+                # After waiting, check again with 50% chance of still being busy
+                channel_busy = random.random() < 0.5
+                attempt += 1
+                continue
+                
+            # Channel is free, start transmission
+            print(f"[SWITCH {self.switch_number}] ▶ [CSMA/CD] Channel is free. {sender_device.get_device_name()} starts transmitting...")
+            
+            # Simulate possible collision (random chance)
+            collision_happened = random.random() < 0.2  # 20% chance of collision
+            
+            if collision_happened:
+                print(f"[SWITCH {self.switch_number}] ⚠ [CSMA/CD] COLLISION DETECTED during transmission!")
+                print(f"[SWITCH {self.switch_number}] ▶ [CSMA/CD] Sending jamming signal...")
+                
+                # Calculate backoff time using exponential backoff algorithm
+                backoff = random.randint(1, 2 ** min(attempt, 10))  # Limit exponent to avoid overflow
+                print(f"[SWITCH {self.switch_number}] ▶ [CSMA/CD] Backing off for {backoff} time units...")
+                
+                time.sleep(0.2 * backoff)  # Wait according to backoff algorithm
+                attempt += 1
+                continue
+                
+            # No collision, proceed with switching
+            print(f"[SWITCH {self.switch_number}] ✓ [CSMA/CD] Transmission successful at physical layer")
+            print(f"[SWITCH {self.switch_number}] === DATA LINK LAYER: MAC LEARNING & FORWARDING ===")
+            
+            # Check if we know this MAC address yet (MAC Table lookup)
+            known_receiver = False
+            if hasattr(self, 'mac_table') and receiver_device.get_mac() in self.mac_table:
+                known_receiver = True
+                print(f"[SWITCH {self.switch_number}] ✓ MAC address found in table: {receiver_device.get_mac()} → {self.mac_table[receiver_device.get_mac()]}")
+            elif receiver_device in self.connected_direct:
+                known_receiver = True
+                port_num = self.connected_direct.index(receiver_device) + 1
+                print(f"[SWITCH {self.switch_number}] ✓ Device connected directly: {receiver_device.get_device_name()} on Port {port_num}")
+                
+                # Add to MAC table for future reference
+                if hasattr(self, 'mac_table'):
+                    self.mac_table[receiver_device.get_mac()] = f"PORT {port_num}"
+                    print(f"[SWITCH {self.switch_number}] ⓘ MAC Table Updated: {receiver_device.get_mac()} → PORT {port_num}")
+                    
+            # Learn the sender's MAC if needed
+            if hasattr(self, 'mac_table') and sender_device.get_mac() not in self.mac_table:
+                if sender_device in self.connected_direct:
+                    port_num = self.connected_direct.index(sender_device) + 1
+                    self.mac_table[sender_device.get_mac()] = f"PORT {port_num}"
+                    print(f"[SWITCH {self.switch_number}] ⓘ MAC Table Updated: {sender_device.get_mac()} → PORT {port_num}")
+            
+            # Unlike a hub, a switch only forwards to the specific destination
+            if known_receiver:
+                print(f"[SWITCH {self.switch_number}] ▶ Forwarding frame directly to destination")
+            else:
+                print(f"[SWITCH {self.switch_number}] ⚠ Unknown destination MAC, flooding frame to all ports")
+                
+            # Send the data to the receiver
+            print(f"[SWITCH {self.switch_number}] === NETWORK LAYER: PASSING DATA UPWARD ===")
+            receiver_device.set_receiver_data(data)
+            print(f"[SWITCH {self.switch_number}] ✓ Frame forwarded to destination")
+            return
+            
+        # If we reach here, max attempts were exceeded
+        print(f"[SWITCH {self.switch_number}] ❌ [CSMA/CD] Transmission failed after {max_attempts} attempts")
     
     def send_data_via_hub(self, sender_hub, receiver_hub, sender, receiver):
         """

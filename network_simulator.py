@@ -521,6 +521,15 @@ class NetworkSimulator:
                     self.sender_hub.send_data_to_receiver(self.receiver_device)
                 elif connection_type == "Same Switch":
                     print("[NETWORK] ▶ Same switch path")
+                    print("\n[NETWORK] === OSI MODEL DATA TRANSFER DEMONSTRATION ===")
+                    print("[NETWORK] ▶ APPLICATION LAYER: Preparing data from user input")
+                    print("[NETWORK] ▶ PRESENTATION LAYER: Data formatting (not implemented)")
+                    print("[NETWORK] ▶ SESSION LAYER: Session management (not implemented)")
+                    print("[NETWORK] ▶ TRANSPORT LAYER: End-to-end delivery with Go-Back-N")
+                    print("[NETWORK] ▶ NETWORK LAYER: Route selection - device connected to switch")
+                    print("[NETWORK] ▶ DATA LINK LAYER: Framing with error detection")
+                    print("[NETWORK] ▶ PHYSICAL LAYER: Using CSMA/CD for media access")
+                    # Send data through switch with CSMA/CD
                     sender_connected_switch.send_direct_data(self.sender_device, self.receiver_device)
                 elif connection_type == "Different Hubs":
                     print("[NETWORK] ▶ Different hubs path")

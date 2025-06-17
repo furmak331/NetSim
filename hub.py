@@ -204,15 +204,27 @@ class Hub:
         import random
         import time
         attempt = 0
+        
+        # Randomly determine if channel is initially busy (30% chance)
+        if not self.channel_busy:  # Only set if not already busy
+            self.channel_busy = random.random() < 0.3
+            
         while attempt < max_attempts:
             print(f"[HUB {self.hub_number}] ▶ [CSMA/CD] Attempt {attempt+1}: Checking if channel is busy...")
             if self.channel_busy:
                 print(f"[HUB {self.hub_number}] ▶ [CSMA/CD] Channel busy. Waiting...")
                 time.sleep(0.5)
-                continue
+                # After waiting, check again with 50% chance of still being busy
+                self.channel_busy = random.random() < 0.5
+                print(f"[HUB {self.hub_number}] ▶ [CSMA/CD] Channel is now {'busy' if self.channel_busy else 'free'}")
+                if self.channel_busy:
+                    attempt += 1
+                    continue
+                    
             # Channel is free, start transmission
             self.set_channel_busy(True)
             print(f"[HUB {self.hub_number}] ▶ [CSMA/CD] Channel is free. {sender_device.get_device_name()} starts transmitting...")
+            
             # Simulate possible collision (random chance)
             collision_happened = random.random() < 0.3  # 30% chance
             if collision_happened:
@@ -225,12 +237,16 @@ class Hub:
                 self.set_collision(False)
                 attempt += 1
                 continue
+                
             # No collision, broadcast
             self.data = data
+            print(f"[HUB {self.hub_number}] === PHYSICAL LAYER: TRANSMISSION STARTED ===")
             self.broadcast_physical_layer(sender_device)
             self.set_channel_busy(False)
-            print(f"[HUB {self.hub_number}] ▶ [CSMA/CD] Transmission successful at physical layer.")
+            print(f"[HUB {self.hub_number}] ✓ [CSMA/CD] Transmission successful at physical layer.")
+            print(f"[HUB {self.hub_number}] === DATA LINK LAYER: FRAME FORWARDED ===")
             return True
+            
         print(f"[HUB {self.hub_number}] ❌ [CSMA/CD] Transmission failed after {max_attempts} attempts.")
         return False
     
