@@ -4,6 +4,39 @@ Equivalent to DomainNameServer.java in the Java implementation
 """
 
 class DomainNameServer:
+    def __init__(self):
+        """Initialize the DNS server with an empty mapping"""
+        self.domain_to_ip = {}
+        print("[DNS] Domain Name Server initialized")
+    
+    def set_domain_ip_mapping(self, domain, ip):
+        """
+        Add a domain-to-IP mapping
+        
+        Args:
+            domain (str): Domain name
+            ip (str): IP address
+        """
+        self.domain_to_ip[domain] = ip
+        print(f"[DNS] Added mapping: {domain} → {ip}")
+    
+    def get_ip_from_domain_name(self, domain):
+        """
+        Look up an IP address from a domain name
+        
+        Args:
+            domain (str): Domain name to look up
+            
+        Returns:
+            str: IP address or None if not found
+        """
+        ip = self.domain_to_ip.get(domain)
+        if ip:
+            print(f"[DNS] ✓ Lookup successful: {domain} → {ip}")
+        else:
+            print(f"[DNS] ❌ Lookup failed: {domain} not found")
+        return ip
+    
     @staticmethod
     def store_DNS_for_email(receiver_IP):
         """

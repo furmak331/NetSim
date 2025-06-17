@@ -52,6 +52,10 @@ class EndDevices:
     def get_mac(self):
         """Get MAC address of this device"""
         return self.MAC
+        
+    def get_device_name(self):
+        """Get device name"""
+        return self.device_name
     
     def set_data(self, d):
         """

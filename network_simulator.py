@@ -380,6 +380,8 @@ class NetworkSimulator:
         # Reset previous connections
         self.sender_hub = None
         self.receiver_hub = None
+        self.sender_router = None
+        self.receiver_router = None
         sender_switch = None
         receiver_switch = None
         
@@ -390,6 +392,21 @@ class NetworkSimulator:
                 self.sender_hub = hub
             if devices and self.receiver_device in devices:
                 self.receiver_hub = hub
+        
+        # Find the routers for these devices (based on IP address)
+        for router in self.routers:
+            # Check if device IP is in router's network
+            router_network = router.NID.split('.')[0]  # e.g., "10" from "10.0.0.0"
+            
+            # Check sender
+            if self.sender_IP.startswith(f"{router_network}."):
+                self.sender_router = router
+                print(f"Sender is in Router {router.router_number}'s network ({router.NID})")
+                
+            # Check receiver
+            if self.receiver_IP.startswith(f"{router_network}."):
+                self.receiver_router = router
+                print(f"Receiver is in Router {router.router_number}'s network ({router.NID})")
         
         # Find if devices are connected directly to switches
         for switch in self.switches:
@@ -472,7 +489,14 @@ class NetworkSimulator:
                 receiver_connected_switch = switch
                 
         connection_type = "Unknown"
-        if self.sender_hub and self.receiver_hub:
+        
+        # Check if devices are in different router networks
+        if self.sender_router and self.receiver_router and self.sender_router != self.receiver_router:
+            connection_type = "Inter-Router"
+            # Build routing tables if not already built
+            for router in self.routers:
+                router.build_routing_table(self.routers)
+        elif self.sender_hub and self.receiver_hub:
             if self.sender_hub == self.receiver_hub:
                 connection_type = "Same Hub"
             else:
@@ -483,7 +507,7 @@ class NetworkSimulator:
             else:
                 connection_type = "Different Switches"
         elif self.sender_hub and receiver_connected_to_switch:
-            connection_type = "Hub to Switch"
+            connection_type = "Hub to Switch" 
         elif sender_connected_to_switch and self.receiver_hub:
             connection_type = "Switch to Hub"
         else:
@@ -556,6 +580,29 @@ class NetworkSimulator:
                 elif connection_type == "Switch to Hub":
                     print("[NETWORK] ⚠ Switch to hub path - not implemented yet, using direct connection")
                     self.sender_device.send_data_to_receiver(self.receiver_device)
+                elif connection_type == "Inter-Router":
+                    print("\n[NETWORK] === OSI MODEL INTER-ROUTER DATA TRANSFER ===")
+                    print("[NETWORK] ▶ APPLICATION LAYER: Preparing data from user input")
+                    print("[NETWORK] ▶ PRESENTATION LAYER: Data formatting")
+                    print("[NETWORK] ▶ SESSION LAYER: Session establishment")
+                    print("[NETWORK] ▶ TRANSPORT LAYER: End-to-end delivery with Go-Back-N")
+                    print("[NETWORK] ▶ NETWORK LAYER: IP routing between different networks")
+                    print(f"[NETWORK] ▶ Source IP: {self.sender_IP}, Destination IP: {self.receiver_IP}")
+                    
+                    # Display routing information
+                    print(f"\n[ROUTER {self.sender_router.router_number}] === ROUTING PROCESS ===")
+                    self.sender_router.display_routing_table()
+                    
+                    # Route the packet through routers
+                    success = self.route_packet_through_network(self.sender_IP, self.receiver_IP, frame)
+                    
+                    if success:
+                        # If routing is successful, the packet arrives at the destination
+                        self.receiver_device.set_receiver_data(frame)
+                    else:
+                        print(f"[NETWORK] ❌ Routing failed. Packet did not reach destination.")
+                        # Handle failed transmission (set a NAK)
+                        self.receiver_device.ACKorNAK = f"NAK{current_seq}"
                 else:
                     print("[NETWORK] ⚠ Unknown path, using direct connection")
                     self.sender_device.send_data_to_receiver(self.receiver_device)
@@ -1190,10 +1237,10 @@ class NetworkSimulator:
             print("9. Show Network Topology")
             print("10. Select Sender and Receiver")
             print("11. Create Complex Network Topology")  
+            print("12. Network Layer Routing Test")
+            print("13. Advanced Network Layer Setup (Routers, Connections, Routing Tables)")
             print("0. Exit")
-            
             choice = input("Enter your choice: ")
-            
             if choice == '1':
                 self.create_direct_connection()
             elif choice == '2':
@@ -1216,8 +1263,281 @@ class NetworkSimulator:
                 self.select_sender_and_receiver()
             elif choice == '11':
                 self.create_network_topology()
+            elif choice == '12':
+                self.create_routing_test()
+            elif choice == '13':
+                self.advanced_network_layer_setup()
             elif choice == '0':
                 print("\nExiting Network Simulator. Goodbye!")
+                break
+            else:
+                print("Invalid choice. Please try again.")
+    
+    def route_packet_through_network(self, source_ip, destination_ip, packet_data):
+        """
+        Route a packet through the network from source IP to destination IP
+        
+        This implements the Network Layer functionality for packet routing across multiple routers
+        
+        Args:
+            source_ip (str): Source IP address
+            destination_ip (str): Destination IP address
+            packet_data (str): Packet data to be routed
+            
+        Returns:
+            bool: True if packet was successfully delivered, False otherwise
+        """
+        print(f"\n[NETWORK] === ROUTING PACKET ===")
+        print(f"[NETWORK] ▶ Source IP: {source_ip}")
+        print(f"[NETWORK] ▶ Destination IP: {destination_ip}")
+        
+        if not self.sender_router or not self.receiver_router:
+            print("[NETWORK] ❌ Source or destination router not found")
+            return False
+            
+        # Initialize variables for routing simulation
+        current_router = self.sender_router
+        max_hops = 8  # Prevent infinite loops
+        hop_count = 0
+        
+        print(f"[NETWORK] ▶ Starting at Router {current_router.router_number}")
+        
+        # Loop until we reach the destination router or hit max hops
+        while current_router != self.receiver_router and hop_count < max_hops:
+            # Simulate router congestion (random level between 0.2 and 0.7)
+            congestion_level = random.uniform(0.2, 0.7)
+            if not current_router.simulate_congestion(congestion_level):
+                print(f"[NETWORK] ❌ Packet dropped due to network congestion")
+                return False
+                
+            # Route the packet using the router's routing table
+            success, next_hop = current_router.route_packet(source_ip, destination_ip, packet_data)
+            
+            if not success:
+                print(f"[NETWORK] ❌ Routing failed at Router {current_router.router_number}")
+                return False
+                
+            # Find the next router in the path
+            next_router = None
+            for router in self.routers:
+                if router.router_number == next_hop and router != current_router:
+                    next_router = router
+                    break
+            
+            if next_router:
+                print(f"[NETWORK] ▶ Hop {hop_count+1}: Router {current_router.router_number} → Router {next_router.router_number}")
+                # Simulate link delay between routers (50-150ms)
+                link_delay = random.uniform(0.05, 0.15)
+                print(f"[NETWORK] ▶ Link delay: {link_delay:.3f}s")
+                time.sleep(link_delay)
+                current_router = next_router
+            else:
+                # We've reached the destination network
+                print(f"[NETWORK] ✓ Reached destination network at Router {current_router.router_number}")
+                break
+                
+            hop_count += 1
+            
+        if hop_count >= max_hops:
+            print(f"[NETWORK] ❌ Packet exceeded maximum hop count ({max_hops})")
+            return False
+            
+        print(f"[NETWORK] ✓ Successfully routed packet to destination network")
+        
+        # If destination router found, send to the correct switch
+        if current_router == self.receiver_router:
+            print(f"[NETWORK] ▶ Router {current_router.router_number} delivering packet to local network")
+            
+            # In a real network, the router would now perform ARP to find the MAC address
+            print(f"[NETWORK] ▶ Router performing ARP lookup for {destination_ip}")
+            
+            # Find the appropriate switch to deliver to
+            if self.receiver_switch:
+                print(f"[NETWORK] ▶ Forwarding to Switch {self.receiver_switch.switch_number}")
+                # The switch would then forward to the device
+                
+                # For demonstration, we simulate the complete delivery
+                self.receiver_device.set_receiver_data(packet_data)
+                self.receiver_device.ACKorNAK = f"ACK{int(packet_data.split(':')[0])}"
+                return True
+            else:
+                # Try to find a path through a hub
+                if self.receiver_hub:
+                    print(f"[NETWORK] ▶ Forwarding to Hub {self.receiver_hub.get_hub_number()}")
+                    self.receiver_device.set_receiver_data(packet_data)
+                    self.receiver_device.ACKorNAK = f"ACK{int(packet_data.split(':')[0])}"
+                    return True
+                    
+        # If we get here, we couldn't find a complete path
+        print(f"[NETWORK] ❌ Cannot find final delivery path")
+        return False
+        
+    def create_routing_test(self):
+        """Test routing functionality between different networks"""
+        print("\n--- ROUTING TEST ---")
+        
+        if len(self.routers) < 2:
+            print("Need at least 2 routers to test routing. Please create more routers.")
+            return
+            
+        # Make sure sender and receiver are selected
+        if self.sender_device is None or self.receiver_device is None:
+            success = self.select_sender_and_receiver()
+            if not success:
+                return
+                
+        # Make sure devices are in different router networks
+        if self.sender_router == self.receiver_router:
+            print("For routing test, sender and receiver must be in different networks.")
+            print("Please select devices from different router networks.")
+            success = self.select_sender_and_receiver()
+            if not success or self.sender_router == self.receiver_router:
+                print("Cannot find devices in different networks. Test cancelled.")
+                return
+                
+        # Build routing tables
+        print("\nBuilding routing tables for all routers...")
+        for router in self.routers:
+            router.build_routing_table(self.routers)
+            
+        # Display all routing tables
+        print("\nRouting tables for all routers:")
+        for router in self.routers:
+            router.display_routing_table()
+            
+        # Get test data
+        test_data = input("\nEnter test data to route through the network: ")
+        
+        # Create a test packet with sequence number 0
+        packet = f"0:{test_data}"
+        
+        print(f"\n[NETWORK] === NETWORK LAYER: ROUTING TEST ===")
+        print(f"[NETWORK] ▶ Source IP: {self.sender_IP}")
+        print(f"[NETWORK] ▶ Destination IP: {self.receiver_IP}")
+        print(f"[NETWORK] ▶ Source Network: {self.sender_router.NID}")
+        print(f"[NETWORK] ▶ Destination Network: {self.receiver_router.NID}")
+        
+        # Route the packet
+        success = self.route_packet_through_network(self.sender_IP, self.receiver_IP, packet)
+        
+        if success:
+            print(f"\n[NETWORK] ✓ Successfully delivered packet from {self.sender_IP} to {self.receiver_IP}")
+            print(f"[RECEIVER] ▶ Received data: {self.receiver_device.get_data().split(':', 1)[1]}")
+        else:
+            print(f"\n[NETWORK] ❌ Failed to deliver packet from {self.sender_IP} to {self.receiver_IP}")
+    
+    def advanced_network_layer_setup(self):
+        """Advanced CLI for custom network layer setup (routers, connections, routing tables)"""
+        print("\n--- ADVANCED NETWORK LAYER SETUP ---")
+        while True:
+            print("\nOptions:")
+            print("1. Add Router with custom Network ID (NID)")
+            print("2. Connect Routers (for multi-hop)")
+            print("3. Connect Router to Switch")
+            print("4. View Routing Tables")
+            print("5. Edit Routing Table (manual entry)")
+            print("6. Back to Main Menu")
+            choice = input("Enter your choice (1-6): ")
+            if choice == '1':
+                router_number = len(self.routers)
+                nid = input("Enter Network ID (e.g., 10.0.0.0): ")
+                router = Router(router_number, nid)
+                self.routers.append(router)
+                print(f"Added Router {router_number} with NID {nid}")
+            elif choice == '2':
+                if len(self.routers) < 2:
+                    print("Need at least 2 routers to connect.")
+                    continue
+                print("Available routers:")
+                for r in self.routers:
+                    print(f"{r.router_number}: NID={r.NID}")
+                r1 = int(input("Enter first router number: "))
+                r2 = int(input("Enter second router number: "))
+                # For simplicity, add each other to routing tables as direct neighbors
+                self.routers[r1].routing_table[self.routers[r2].NID] = {
+                    "next_hop": r2,
+                    "metric": 1,
+                    "interface": f"interface {r2}"
+                }
+                self.routers[r2].routing_table[self.routers[r1].NID] = {
+                    "next_hop": r1,
+                    "metric": 1,
+                    "interface": f"interface {r1}"
+                }
+                print(f"Connected Router {r1} <--> Router {r2}")
+            elif choice == '3':
+                if not self.routers or not self.switches:
+                    print("Need at least one router and one switch.")
+                    continue
+                print("Available routers:")
+                for r in self.routers:
+                    print(f"{r.router_number}: NID={r.NID}")
+                router_idx = int(input("Enter router number: "))
+                print("Available switches:")
+                for s in self.switches:
+                    print(f"{s.switch_number}")
+                switch_idx = int(input("Enter switch number: "))
+                self.routers[router_idx].switches.append(self.switches[switch_idx])
+                print(f"Connected Router {router_idx} to Switch {switch_idx}")
+            elif choice == '4':
+                for r in self.routers:
+                    r.display_routing_table()
+            elif choice == '5':
+                if not self.routers:
+                    print("No routers available.")
+                    continue
+                print("Available routers:")
+                for r in self.routers:
+                    print(f"{r.router_number}: NID={r.NID}")
+                router_idx = int(input("Enter router number to edit: "))
+                dest_nid = input("Enter destination Network ID to add/edit: ")
+                next_hop = int(input("Enter next hop router number: "))
+                metric = int(input("Enter metric (cost): "))
+                interface = input("Enter interface name: ")
+                self.routers[router_idx].routing_table[dest_nid] = {
+                    "next_hop": next_hop,
+                    "metric": metric,
+                    "interface": interface
+                }
+                print(f"Routing table updated for Router {router_idx}")
+            elif choice == '6':
+                break
+            else:
+                print("Invalid choice. Try again.")
+
+    def run_cli(self):
+        """Run the CLI interface for network simulator"""
+        print("\n=== NETWORK SIMULATOR CLI ===")
+        
+        while True:
+            print("\nMain Menu:")
+            print("1. Create Network Topology")
+            print("2. Print Network Topology")
+            print("3. Select Sender and Receiver")
+            print("4. Data Transfer Test")
+            print("5. Email Service Test")
+            print("6. Search Service Test")
+            print("7. Network Layer Routing Test")
+            print("8. Exit")
+            
+            choice = input("\nEnter your choice (1-8): ")
+            
+            if choice == '1':
+                self.create_network_topology()
+            elif choice == '2':
+                self.print_network_topology()
+            elif choice == '3':
+                self.select_sender_and_receiver()
+            elif choice == '4':
+                self.data_transfer_test()
+            elif choice == '5':
+                self.email_service_test()
+            elif choice == '6':
+                self.search_service_test()
+            elif choice == '7':
+                self.create_routing_test()
+            elif choice == '8':
+                print("Exiting Network Simulator. Goodbye!")
                 break
             else:
                 print("Invalid choice. Please try again.")

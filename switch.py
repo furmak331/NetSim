@@ -18,7 +18,6 @@ class Switch:
         self.connected_via_hub = {}  # Maps MAC address to Hub for faster lookup
         self.mac_table = {}  # Maps MAC address to a port (for MAC learning demonstration)
         self.data = None
-        self.arp_requests = {}  # Keep track of ARP requests (IP -> requesting device)
         print(f"[SWITCH {num}] ▶ Switch initialized")
     
     def get_data(self, data):
@@ -273,60 +272,36 @@ class Switch:
     
     def broadcast_arp(self, sender_device, target_ip):
         """
-        Broadcast ARP request to all ports (excluding the one the request came from)
-        This implements the proper ARP behavior for switches
+        ARP logic should not be in Switch. This method is deprecated and will be removed.
+        """
+        print(f"[SWITCH {self.switch_number}] ARP logic is now handled by the Router (Layer 3 device). No action taken.")
+        return None
+    
+    def find_device_by_ip(self, ip_address):
+        """
+        Find a device connected to this switch by IP address
+        Useful for ARP lookups
         
         Args:
-            sender_device (EndDevices): The device sending the ARP request
-            target_ip (str): The IP address being queried
+            ip_address (str): IP address to find
             
         Returns:
-            EndDevices or None: The device with matching IP if found, otherwise None
+            EndDevices or None: Device with the IP if found, None otherwise
         """
-        print(f"\n[SWITCH {self.switch_number}] === ARP BROADCAST ===")
-        print(f"[SWITCH {self.switch_number}] ▶ ARP request from {sender_device.get_device_name()} (MAC: {sender_device.get_mac()})")
-        print(f"[SWITCH {self.switch_number}] ▶ Looking for device with IP: {target_ip}")
+        print(f"[SWITCH {self.switch_number}] ▶ Looking for device with IP {ip_address}")
         
-        # Store the ARP request
-        self.arp_requests[target_ip] = sender_device
-        
-        # Learn the sender's MAC address
-        if sender_device in self.connected_direct:
-            port_num = self.connected_direct.index(sender_device) + 1
-            self.mac_table[sender_device.get_mac()] = f"PORT {port_num}"
-            print(f"[SWITCH {self.switch_number}] ⓘ MAC Table Updated: {sender_device.get_mac()} → PORT {port_num}")
-            
-        # Check directly connected devices first
-        sender_port = None
-        if sender_device in self.connected_direct:
-            sender_port = self.connected_direct.index(sender_device) + 1
-            
-        for i, device in enumerate(self.connected_direct):
-            port_num = i + 1
-            if port_num == sender_port:
-                continue  # Skip the source port
-                
-            if device.IP == target_ip:
-                print(f"[SWITCH {self.switch_number}] ✓ Found matching device: {device.get_device_name()} on PORT {port_num}")
-                # Learn the device's MAC address
-                self.mac_table[device.get_mac()] = f"PORT {port_num}"
+        # Check directly connected devices
+        for device in self.connected_direct:
+            if device.IP == ip_address:
+                print(f"[SWITCH {self.switch_number}] ✓ Found device with IP {ip_address}: MAC {device.get_mac()}")
                 return device
-            else:
-                print(f"[SWITCH {self.switch_number}] ▶ Sending ARP request to device on PORT {port_num}")
-                
-        # If not found in direct connections, try via connected hubs
-        for i, hub in enumerate(self.hubs):
-            port_num = len(self.connected_direct) + i + 1
-            print(f"[SWITCH {self.switch_number}] ▶ Forwarding ARP request to Hub {hub.get_hub_number()} on PORT {port_num}")
-            
-            # Check devices connected to this hub
-            devices = hub.get_connected_devices()
-            for device in devices:
-                if device.IP == target_ip:
-                    print(f"[SWITCH {self.switch_number}] ✓ Found matching device: {device.get_device_name()} via Hub {hub.get_hub_number()}")
-                    # Learn the device's MAC address
-                    self.connected_via_hub[device.get_mac()] = hub
+        
+        # Check devices connected via hubs
+        for hub in self.hubs:
+            for device in hub.get_connected_devices():
+                if device.IP == ip_address:
+                    print(f"[SWITCH {self.switch_number}] ✓ Found device with IP {ip_address} via Hub {hub.get_hub_number()}: MAC {device.get_mac()}")
                     return device
-                    
-        print(f"[SWITCH {self.switch_number}] ❌ No device with IP {target_ip} found")
+        
+        print(f"[SWITCH {self.switch_number}] ⚠ No device with IP {ip_address} found")
         return None

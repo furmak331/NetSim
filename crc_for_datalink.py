@@ -1,35 +1,86 @@
 """
-CRC for Data Link implementation for Network Simulator
-Equivalent to CRCforDataLink.java in the Java implementation
+CRC-32 implementation for Data Link layer
 """
+import binascii
+import zlib
+import random
 
-class CRCforDataLink:
-    def __init__(self):
-        """Initialize CRC for Data Link with binary data and divisor"""
-        self.binary_data = ""
-        self.recvd_data = ""
-        self.divisor = "100000111"  # Generator polynomial CRC-8
-        self.rem = ""
-        self.sxt_copy = ""
-        self.original_text = ""
+class CRCForDataLink:
+    """
+    Class to handle CRC-32 calculations for data integrity checks
+    Uses zlib's CRC-32 implementation which is standard and widely used
+    """
     
-    def text_to_binary(self, text):
+    def __init__(self):
+        """Initialize the CRC calculator"""
+        pass
+    
+    def calculate_crc32(self, data):
         """
-        Convert text to binary string
+        Calculate CRC-32 for the given data string
         
         Args:
-            text (str): Text to convert
+            data (str): The data for which to calculate CRC
             
         Returns:
-            str: Binary representation
+            str: Hexadecimal string representation of the CRC-32 value
         """
-        binary = ""
-        for char in text:
-            # Convert each character to its ASCII value, then to binary
-            # Remove '0b' prefix and pad to 8 bits
-            binary += format(ord(char), '08b')
-        return binary
+        # Convert string to bytes and calculate CRC-32
+        crc = zlib.crc32(data.encode('utf-8'))
+        # Convert to hexadecimal string format
+        return format(crc & 0xFFFFFFFF, '08x')
     
+    def verify_crc32(self, data, crc_value):
+        """
+        Verify if the data matches the provided CRC value
+        
+        Args:
+            data (str): The data to verify
+            crc_value (str): The expected CRC-32 value in hexadecimal
+            
+        Returns:
+            bool: True if CRC matches, False otherwise
+        """
+        # Calculate CRC for the data
+        calculated_crc = self.calculate_crc32(data)
+        # Compare with the provided CRC
+        return calculated_crc == crc_value
+    
+    def introduce_random_error(self, data, error_probability=0.1):
+        """
+        Introduce a random bit error in the data with given probability
+        
+        Args:
+            data (str): The data string that might get corrupted
+            error_probability (float): Probability of error (0-1)
+            
+        Returns:
+            tuple: (modified_data, error_introduced)
+        """
+        if random.random() < error_probability:
+            # Choose a random position to modify
+            if not data:
+                return data, False
+                
+            pos = random.randint(0, len(data) - 1)
+            
+            # Convert string to list for modification
+            chars = list(data)
+            
+            # Modify a random character
+            original_char = chars[pos]
+            # XOR with a random value to change it
+            new_char = chr(ord(original_char) ^ random.randint(1, 127))
+            chars[pos] = new_char
+            
+            print(f"[ERROR SIMULATION] Corrupted character at position {pos}: '{original_char}' -> '{new_char}'")
+            
+            # Convert back to string
+            return ''.join(chars), True
+        else:
+            return data, False
+        
+    # For backward compatibility with the old implementation
     def binary_to_text(self, binary):
         """
         Convert binary string to text

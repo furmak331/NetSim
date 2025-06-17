@@ -28,7 +28,23 @@ class CLIUtils:
         Args:
             section_text (str): Section text to display
         """
-        print(f"\n{'▼ ' + section_text + ' ▼':-^60}")
+        
+    @staticmethod
+    def print_subsection(text):
+        """Print a subsection with simple formatting"""
+        print(f"\n--- {text} ---")
+        
+    @staticmethod
+    def progress_bar(duration=1.0, prefix="Processing", length=30):
+        """Show a progress bar for the specified duration"""
+        print(f"{prefix}: ", end="", flush=True)
+        for i in range(length + 1):
+            time.sleep(duration / length)
+            progress = i / length
+            bar = "█" * i + " " * (length - i)
+            percent = int(progress * 100)
+            print(f"\r{prefix}: [{bar}] {percent}%", end="", flush=True)
+        print()
     
     @staticmethod
     def print_progress(description, success=True):

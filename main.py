@@ -2,6 +2,8 @@
 Main entry point for the Network Simulator
 """
 
+import argparse
+import sys
 from network_simulator import NetworkSimulator
 from cli_utils import CLIUtils
 
@@ -17,12 +19,24 @@ def show_welcome_message():
     print("• Physical and Data Link layer operations")
     print("\nCreated for educational purposes")
 
+def main():
+    """Main entry point with command line argument processing"""
+    parser = argparse.ArgumentParser(description="Network Simulator")
+    parser.add_argument("--demo", action="store_true", help="Run the comprehensive network demo")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+    args = parser.parse_args()
+    
+    if args.demo:
+        # Run the comprehensive demo
+        print("Running comprehensive network demo...")
+        # We import here to avoid circular imports
+        from test_comprehensive_network import main as run_demo
+        run_demo()
+    else:
+        # Run the regular simulator
+        show_welcome_message()
+        simulator = NetworkSimulator()
+        simulator.run_simulator()
+
 if __name__ == "__main__":
-    # Show welcome message
-    show_welcome_message()
-    
-    # Initialize the network simulator
-    simulator = NetworkSimulator()
-    
-    # Run the simulator with enhanced CLI
-    simulator.run_simulator()
+    main()
