@@ -260,17 +260,75 @@ def simulate_frame_transmission(source, destination, data, routers=None, verbose
     # LAYER 4: TRANSPORT LAYER - SOURCE DEVICE
     ################################################################
     print("\n[LAYER 4: TRANSPORT]")
-    # Adding TCP header information
-    source_port = 1024 + hash(source.device_name) % 64511  # Random high port
-    dest_port = 80  # Assuming HTTP traffic for demonstration
-    seq_num = hash(data) % 1000000
-    tcp_header = f"SrcPort={source_port},DstPort={dest_port},Seq={seq_num},ACK=0,Flags=SYN"
-    segment = f"{tcp_header}|{application_data}"
-    print(f"[{source.device_name}] TCP Protocol - Adding Headers:")
-    print(f"[{source.device_name}] ▶ Source Port: {source_port}")
-    print(f"[{source.device_name}] ▶ Destination Port: {dest_port}")
-    print(f"[{source.device_name}] ▶ Sequence Number: {seq_num}")
-    print(f"[{source.device_name}] ▶ Flags: SYN")
+    
+    # Import and use real transport layer
+    from transport_layer import TransportLayer, ProtocolType
+    transport = TransportLayer()
+    
+    # Register the source device as a process
+    process_id = f"process_{source.device_name}"
+    source_port = transport.register_process(process_id, ProtocolType.TCP)
+    
+    if source_port:
+        print(f"[{source.device_name}] Transport Layer - Process Registration:")
+        print(f"[{source.device_name}] ▶ Process ID: {process_id}")
+        print(f"[{source.device_name}] ▶ Allocated Source Port: {source_port}")
+        print(f"[{source.device_name}] ▶ Protocol: TCP")
+        
+        # Create TCP connection to destination (assuming HTTP service)
+        dest_port = 80  # HTTP service
+        dest_ip = destination.IP.split('/')[0]
+        
+        print(f"[{source.device_name}] TCP Connection Establishment:")
+        print(f"[{source.device_name}] ▶ Destination IP: {dest_ip}")
+        print(f"[{source.device_name}] ▶ Destination Port: {dest_port} (HTTP)")
+        
+        # Create TCP connection (this handles the three-way handshake)
+        tcp_connection = transport.create_tcp_connection(process_id, dest_ip, dest_port)
+        
+        if tcp_connection:
+            # Establish connection (three-way handshake)
+            connection_established = transport.establish_tcp_connection(process_id, dest_ip, dest_port)
+            
+            if connection_established:
+                print(f"[{source.device_name}] ✓ TCP Connection established successfully")
+                
+                # Send data using TCP with sliding window flow control
+                print(f"[{source.device_name}] TCP Data Transmission:")
+                success, segments = tcp_connection.send_data(application_data)
+                
+                if success and segments:
+                    segment = segments[0]  # Use first segment for demonstration
+                    print(f"[{source.device_name}] ▶ Created TCP segment with sliding window flow control")
+                    print(f"[{source.device_name}] ▶ Window size: {tcp_connection.flow_control.window_size}")
+                    print(f"[{source.device_name}] ▶ Sequence number: {tcp_connection.seq_num}")
+                else:
+                    # Fallback to simulated segment
+                    tcp_header = f"SrcPort={source_port},DstPort={dest_port},Seq={tcp_connection.seq_num},ACK={tcp_connection.ack_num},Flags=24"
+                    segment = f"{tcp_header}|{application_data}"
+                    print(f"[{source.device_name}] ▶ Data transmission failed, using fallback segment")
+            else:
+                # Fallback to simulated segment
+                tcp_header = f"SrcPort={source_port},DstPort={dest_port},Seq=0,ACK=0,Flags=2"
+                segment = f"{tcp_header}|{application_data}"
+                print(f"[{source.device_name}] ▶ Connection establishment failed, using simulated segment")
+        else:
+            # Fallback to simulated segment
+            tcp_header = f"SrcPort={source_port},DstPort={dest_port},Seq=0,ACK=0,Flags=2"
+            segment = f"{tcp_header}|{application_data}"
+            print(f"[{source.device_name}] ▶ TCP connection creation failed, using simulated segment")
+    else:
+        # Fallback to original simulated implementation
+        source_port = 1024 + hash(source.device_name) % 64511
+        dest_port = 80
+        seq_num = hash(data) % 1000000
+        tcp_header = f"SrcPort={source_port},DstPort={dest_port},Seq={seq_num},ACK=0,Flags=SYN"
+        segment = f"{tcp_header}|{application_data}"
+        print(f"[{source.device_name}] ▶ Port allocation failed, using simulated transport layer")
+        print(f"[{source.device_name}] ▶ Source Port: {source_port}")
+        print(f"[{source.device_name}] ▶ Destination Port: {dest_port}")
+        print(f"[{source.device_name}] ▶ Sequence Number: {seq_num}")
+        print(f"[{source.device_name}] ▶ Flags: SYN")
     
     ################################################################
     # LAYER 3: NETWORK LAYER - SOURCE DEVICE
@@ -805,6 +863,147 @@ def run_demo_scenarios(topology, verbose=False):
     print("\nAll demonstrations complete!")
     input("\nPress Enter to return to the main menu...")
 
+def demonstrate_transport_layer():
+    """Demonstrate transport layer capabilities separately"""
+    CLIUtils.print_header("TRANSPORT LAYER DEMONSTRATION")
+    print("\nThis demonstration shows the transport layer implementation with:")
+    print("• Port management (well-known and ephemeral ports)")
+    print("• Process-to-process communication")
+    print("• TCP connection establishment (3-way handshake)")
+    print("• UDP connectionless communication")  
+    print("• Sliding window flow control (Go-Back-N)")
+    print("• Error handling and retransmission")
+    
+    from transport_layer import TransportLayer, ProtocolType
+    
+    # Create transport layer instance
+    transport = TransportLayer()
+    
+    print("\n" + "="*60)
+    print("STEP 1: PROCESS REGISTRATION AND PORT ALLOCATION")
+    print("="*60)
+    
+    # Register various processes
+    print("\n--- Registering Server Processes (Well-known ports) ---")
+    http_server_port = transport.register_process("http_server", ProtocolType.TCP, 80)
+    dns_server_port = transport.register_process("dns_server", ProtocolType.UDP, 53)
+    ssh_server_port = transport.register_process("ssh_server", ProtocolType.TCP, 22)
+    
+    print("\n--- Registering Client Processes (Ephemeral ports) ---")
+    web_client_port = transport.register_process("web_client", ProtocolType.TCP)
+    dns_client_port = transport.register_process("dns_client", ProtocolType.UDP)
+    file_transfer_port = transport.register_process("file_transfer", ProtocolType.TCP)
+    
+    # Display port allocation
+    transport.display_port_allocation()
+    
+    print("\n" + "="*60)
+    print("STEP 2: TCP CONNECTION ESTABLISHMENT")
+    print("="*60)
+    
+    # Demonstrate TCP 3-way handshake
+    print("\n--- TCP Three-Way Handshake (Web Client → HTTP Server) ---")
+    success = transport.establish_tcp_connection("web_client", "192.168.1.10", 80)
+    
+    if success:
+        print("\n--- Sending HTTP Request over TCP ---")
+        http_request = "GET / HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\n\r\n"
+        transport.send_tcp_data("web_client", "192.168.1.10", 80, http_request)
+    
+    print("\n" + "="*60)
+    print("STEP 3: UDP COMMUNICATION")
+    print("="*60)
+    
+    # Demonstrate UDP communication
+    print("\n--- UDP DNS Query ---")
+    dns_query = "example.com A?"
+    datagram = transport.send_udp_data("dns_client", "192.168.1.1", 53, dns_query)
+    
+    print("\n" + "="*60)
+    print("STEP 4: SLIDING WINDOW FLOW CONTROL DEMONSTRATION")
+    print("="*60)
+    
+    # Create another TCP connection to demonstrate flow control
+    print("\n--- Large File Transfer with Flow Control ---")
+    transport.establish_tcp_connection("file_transfer", "192.168.1.20", 21)
+    
+    # Get the connection to access flow control
+    connection_key = (file_transfer_port, "192.168.1.20", 21)
+    if connection_key in transport.tcp_connections:
+        connection = transport.tcp_connections[connection_key]
+        
+        # Demonstrate window status
+        print("\n--- Initial Window Status ---")
+        print(f"Window size: {connection.flow_control.window_size}")
+        print(f"Send base: {connection.flow_control.send_base}")
+        print(f"Next sequence: {connection.flow_control.next_seq_num}")
+        print(f"Buffered frames: {len(connection.flow_control.sent_but_not_acked)}")
+    else:
+        print("\n--- Initial Window Status ---")
+        print("Connection not found in transport layer")
+        print(f"Expected sequence: {status['expected_seq_num']}")
+        
+        # Send multiple segments to fill the window
+        large_data = "This is a large file transfer that will be split into multiple segments for demonstration of sliding window flow control protocol."
+        
+        print(f"\n--- Sending Large Data (Length: {len(large_data)}) ---")
+        success, segments = connection.send_data(large_data)
+        
+        if success:
+            print(f"\n--- Updated Window Status After Sending ---")
+            status = connection.flow_control.get_window_status()
+            print(f"Send base: {status['send_base']}")
+            print(f"Next sequence: {status['next_seq_num']}")
+            print(f"Unacknowledged segments: {status['unacknowledged_segments']}")
+            
+            # Simulate receiving ACKs
+            print(f"\n--- Simulating ACK Reception ---")
+            for seq_num in status['unacknowledged_segments'][:2]:  # ACK first 2 segments
+                ack_msg = f"ACK{seq_num}"
+                acked = connection.flow_control.process_ack(ack_msg)
+                print(f"Processed {ack_msg}: {acked}")
+            
+            print(f"\n--- Final Window Status After ACKs ---")
+            final_status = connection.flow_control.get_window_status()
+            print(f"Send base: {final_status['send_base']}")
+            print(f"Remaining unacknowledged: {final_status['unacknowledged_segments']}")
+    
+    print("\n" + "="*60)
+    print("STEP 5: ERROR HANDLING AND RETRANSMISSION")
+    print("="*60)
+    
+    # Simulate timeout and retransmission
+    if connection_key in transport.tcp_connections:
+        connection = transport.tcp_connections[connection_key]
+        print("\n--- Simulating Timeout and Retransmission ---")
+        
+        # Simulate timeout
+        time.sleep(0.1)  # Small delay
+        retransmit_list = connection.flow_control.handle_timeout()
+        
+        if retransmit_list:
+            print(f"Segments to retransmit: {[item[0] for item in retransmit_list]}")
+        else:
+            print("No segments need retransmission")
+    
+    print("\n" + "="*60)
+    print("STEP 6: CLEANUP")
+    print("="*60)
+    
+    # Clean up processes
+    processes_to_cleanup = ["web_client", "dns_client", "file_transfer"]
+    for process_id in processes_to_cleanup:
+        transport.cleanup_process(process_id)
+    
+    # Final port allocation status
+    print("\n--- Final Port Allocation Status ---")
+    transport.display_port_allocation()
+    
+    print("\n✓ Transport Layer Demonstration Complete!")
+    print("="*60)
+    
+    input("\nPress Enter to continue to the full network simulation...")
+
 def main():
     """Main function for the comprehensive network test"""
     parser = argparse.ArgumentParser(description="Network Simulator Comprehensive Test")
@@ -901,6 +1100,9 @@ def main():
     
     input("\nPress Enter to create the network topology...")
     
+    # First demonstrate the transport layer capabilities
+    demonstrate_transport_layer()
+    
     topology = create_test_topology(args.verbose)
     print("\nNetwork topology created successfully!")
     print("• 3 separate networks (192.168.1.0/24, 192.168.2.0/24, 192.168.3.0/24)")
@@ -923,6 +1125,3 @@ def main():
     print("• DNS protocol for hostname resolution")
     print("• ARP protocol for IP-to-MAC address resolution")
     print("\nFor more details on how each protocol works, examine the output of each scenario.")
-
-if __name__ == "__main__":
-    main()

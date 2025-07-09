@@ -12,9 +12,18 @@ The simulator implements the full network protocol stack:
 - Email and search engine services simulation
 
 ### Layer 4 (Transport Layer)
-- TCP segment creation with port numbers
-- Sequence numbering
-- Connection establishment
+- **Port Management**: Well-known ports (0-1023) and ephemeral ports (1024-65535)
+- **Process Registration**: Process-to-process communication with port allocation
+- **TCP Implementation**: 
+  - Three-way handshake connection establishment
+  - Sliding window flow control (Go-Back-N protocol)
+  - Reliable data transmission with acknowledgments
+  - Error detection and retransmission
+  - Connection state management
+- **UDP Implementation**:
+  - Connectionless datagram transmission
+  - Simple header format with port information
+- **Flow Control**: Reusable sliding window implementation for both transport and data link layers
 
 ### Layer 3 (Network Layer)
 - Router implementation with routing tables
@@ -32,16 +41,11 @@ The simulator implements the full network protocol stack:
 - End devices creation
 - Hub operation with broadcasting
 - Physical signal transmission simulation
-- IP addressing (IPv4)
-- ARP for MAC address resolution
-
-### Layer 4 (Transport Layer) 
-- Port assignment for processes
-- Flow control
 
 ### Layer 5 (Application Layer)
 - Email service implementation
 - Search engine implementation
+- DNS for hostname-to-IP resolution
 
 ## How to Use
 

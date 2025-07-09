@@ -15,6 +15,12 @@ class Router(Switch):
         self.router_number = number
         self.switches = []
         
+        # Router interface attributes
+        self.ip_address = None
+        self.mac_address = None
+        self.ip_address_wan = None
+        self.mac_address_wan = None
+        
         # Router state variables
         self.queue = []  # Packet queue
         self.max_queue_size = 10  # Maximum packets in queue
@@ -228,3 +234,21 @@ class Router(Switch):
         
         print(f"[ROUTER {self.router_number}] ❌ No device with IP {target_ip} found")
         return None
+    
+    def get_ip(self):
+        """
+        Get router IP address
+        
+        Returns:
+            str: Router IP address
+        """
+        return self.ip_address or f"{self.router_number}.0.0.1"
+    
+    def get_mac(self):
+        """
+        Get router MAC address
+        
+        Returns:
+            str: Router MAC address
+        """
+        return self.mac_address or f"00:00:00:R{self.router_number}:00:01"

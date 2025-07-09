@@ -45,8 +45,8 @@ class DomainNameServer:
         Args:
             receiver_IP (str): IP address of receiver
         """
-        emails = ["akansha08agarwal@gmail.com", "akansha26agarwal@gmail.com", 
-                  "bhartitak11@gmail.com", "zakiakmal13@gmail.com"]
+        emails = ["furmak331@gmail.com", "furmak333@gmail.com", 
+                  "furqanmakhdoomi@gmail.com", "demo@gmail.com"]
         mail_names = []
         
         print("\n[DNS] === EMAIL DNS MAPPINGS ===")
